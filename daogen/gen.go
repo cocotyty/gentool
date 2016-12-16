@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"log"
 	"text/template"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Gen struct {
