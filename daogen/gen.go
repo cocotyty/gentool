@@ -128,7 +128,7 @@ WHERE
 			cs = append(cs, gc)
 		}
 		f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": v.Comment, "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment,"\n","\n //",-1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
 		if err != nil {
 			log.Println(err)
 		}
