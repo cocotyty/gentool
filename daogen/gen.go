@@ -77,7 +77,7 @@ WHERE
 	for _, v := range tables {
 		log.Println(v.Name)
 		cols := []*Column{}
-		err := g.db.Select(&cols, "SHOW FULL COLUMNS FROM "+v.Name)
+		err := g.db.Select(&cols, "SHOW FULL COLUMNS FROM `"+v.Name+"`")
 		if err != nil {
 			panic(err)
 		}
