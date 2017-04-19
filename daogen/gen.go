@@ -128,7 +128,7 @@ WHERE
 			cs = append(cs, gc)
 		}
 		f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": v.Comment, "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment,"\n","\n //",-1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
 		if err != nil {
 			log.Println(err)
 		}
@@ -212,7 +212,7 @@ func (dao *{{.name}}Dao)FindByID(ID int)(one *{{.name}},err error){
 }
 func (dao *{{.name}}Dao)Page(page ,pageSize int)(list []*{{.name}},err error){
 	list=[]*{{.name}}{}
-	err=dao.DB.Select(&list,"select * from ` + "`" + `{{.table}}` + "`" + ` limit ?,?",page*(pageSize-1),pageSize)
+	err=dao.DB.Select(&list,"select "+dao.Fields()+" from ` + "`" + `{{.table}}` + "`" + ` limit ?,?",page*(pageSize-1),pageSize)
 	if err!=nil && err!= sql.ErrNoRows {
 		return nil,err
 	}
@@ -221,7 +221,7 @@ func (dao *{{.name}}Dao)Page(page ,pageSize int)(list []*{{.name}},err error){
 func (dao *{{.name}}Dao)WherePage(whereSql string,page ,pageSize int,args ... interface{})(list []*{{.name}},err error){
 	list=[]*{{.name}}{}
 	args = append(args,page*(pageSize-1),pageSize)
-	err=dao.DB.Select(&list,"select * from ` + "`" + `{{.table}}` + "`" + ` where "+whereSql+" limit ?,?",args...)
+	err=dao.DB.Select(&list,"select "+dao.Fields()+" from ` + "`" + `{{.table}}` + "`" + ` where "+whereSql+" limit ?,?",args...)
 	if err!=nil && err!= sql.ErrNoRows {
 		return nil,err
 	}
