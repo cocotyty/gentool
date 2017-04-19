@@ -75,9 +75,14 @@ type query interface {
 func (builder *whereSqlBuilder) Build() (sql string, args []interface{}) {
 	return builder.buf.String(), builder.args
 }
-
-func (builder *fromSqlBuilder) Limit(offset int, limit int) {
-
+func (builder *whereSqlBuilder) Limit1() (*whereSqlBuilder) {
+	builder.buf.WriteString(" limit 1 ")
+	return builder
+}
+func (builder *whereSqlBuilder) Limit(offset int, limit int) (*whereSqlBuilder) {
+	builder.buf.WriteString(" limit ?,? ")
+	builder.args = append(builder.args, offset, limit)
+	return builder
 }
 
 type order string
