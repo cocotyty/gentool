@@ -212,7 +212,7 @@ func (dao *{{.name}}Dao)FindByID(ID int)(one *{{.name}},err error){
 }
 func (dao *{{.name}}Dao)Page(page ,pageSize int)(list []*{{.name}},err error){
 	list=[]*{{.name}}{}
-	err=dao.DB.Select(&list,"select "+dao.Fields()+" from ` + "`" + `{{.table}}` + "`" + ` limit ?,?",page*(pageSize-1),pageSize)
+	err=dao.DB.Select(&list,"select "+dao.Fields()+" from ` + "`" + `{{.table}}` + "`" + ` limit ?,?",pageSize*(page-1),pageSize)
 	if err!=nil && err!= sql.ErrNoRows {
 		return nil,err
 	}
@@ -220,7 +220,7 @@ func (dao *{{.name}}Dao)Page(page ,pageSize int)(list []*{{.name}},err error){
 }
 func (dao *{{.name}}Dao)WherePage(whereSql string,page ,pageSize int,args ... interface{})(list []*{{.name}},err error){
 	list=[]*{{.name}}{}
-	args = append(args,page*(pageSize-1),pageSize)
+	args = append(args,pageSize*(page-1),pageSize)
 	err=dao.DB.Select(&list,"select "+dao.Fields()+" from ` + "`" + `{{.table}}` + "`" + ` where "+whereSql+" limit ?,?",args...)
 	if err!=nil && err!= sql.ErrNoRows {
 		return nil,err
