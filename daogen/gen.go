@@ -51,6 +51,12 @@ type GoColumn struct {
 }
 
 func (g *Gen) G(pkg, address string) {
+	g.g(pkg, address, tpl)
+}
+func (g *Gen) Models(pkg, address string) {
+	g.g(pkg, address, modelOnlyTpl)
+}
+func (g *Gen) g(pkg, address, tpl string) {
 	paths := strings.Split(os.Getenv("GOPATH"), string(os.PathListSeparator))
 	GOPATH := paths[0]
 	os.MkdirAll(GOPATH+string(os.PathSeparator)+"src"+string(os.PathSeparator)+strings.Replace(pkg, "/", string(os.PathSeparator), -1), 0777)
@@ -128,7 +134,7 @@ WHERE
 			cs = append(cs, gc)
 		}
 		f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment,"\n","\n //",-1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
 		if err != nil {
 			log.Println(err)
 		}
@@ -156,6 +162,23 @@ func convertToLowerCamel(name string) string {
 	})
 	return nName
 }
+
+var modelOnlyTpl = `
+package {{.pkg}}
+
+import (
+	"github.com/jmoiron/sqlx"
+	"database/sql"
+	"bytes"
+	{{if .needTimeImport}}"time"{{end}}
+)
+// {{.comment}}
+type {{.name}} struct{
+	{{range .cols}}
+	// {{.Comment}}
+	{{.Name}} {{if .CanNull}}*{{end}}{{.Type}} {{.Annotation}}
+	{{end}}
+}`
 
 var tpl = `
 package {{.pkg}}
