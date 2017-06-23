@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"io/ioutil"
 	"bytes"
+	"log"
 )
 
 var standPkgs = map[string]bool{}
@@ -23,11 +24,11 @@ func init() {
 	}
 	pathSrc = os.Getenv("GOPATH") + "/src/"
 }
-func ReplaceDockerfileCache(pkg string, ignore string) {
+func ReplaceDockerfileCache(pkg string, ignore map[string]bool) {
 	data, _ := ioutil.ReadFile(pathSrc + pkg + "/Dockerfile")
 	begin := bytes.Index(data, []byte("# GoGetBegin"))
 	end := bytes.Index(data, []byte("# GoGetEnd"))
-	pkgs := gen(pkg, ignore)
+	pkgs := (&Context{pkg: pkg, ignore: ignore, imports: map[string]bool{}}).gen()
 
 	buffer := bytes.NewBuffer(nil)
 	buffer.Write(data[:begin])
@@ -40,18 +41,24 @@ func ReplaceDockerfileCache(pkg string, ignore string) {
 	buffer.Write(data[end:])
 	ioutil.WriteFile(pathSrc+pkg+"/Dockerfile", buffer.Bytes(), 0755)
 }
-func gen(pkg string, ignore string) (pkgs []string) {
+
+type Context struct {
+	pkg     string
+	ignore  map[string]bool
+	imports map[string]bool
+}
+
+func (ctx *Context) gen() (pkgs []string) {
 	pkgs = []string{}
-	dirPath := pathSrc + pkg
-	m := map[string]bool{}
-	genDir(pkg, dirPath, m, ignore)
-	for v := range m {
+	dirPath := pathSrc + ctx.pkg
+	ctx.genDir(dirPath, map[string]bool{})
+	for v := range ctx.imports {
 		pkgs = append(pkgs, v)
 	}
 	sort.Strings(pkgs)
 	return
 }
-func genDir(base, dirPath string, ctx map[string]bool, ignore string) {
+func (ctx *Context) genDir(dirPath string, vendorPkgs map[string]bool) {
 	dir, err := os.Open(dirPath)
 	if err != nil {
 		panic(err)
@@ -62,9 +69,12 @@ func genDir(base, dirPath string, ctx map[string]bool, ignore string) {
 		return
 	}
 	for _, f := range fi {
-		if f.IsDir() {
-			if pathSrc+ignore != dirPath+"/"+f.Name() {
-				genDir(base, dirPath+"/"+f.Name(), ctx, ignore)
+		vendorPkgs = copySet(vendorPkgs)
+		findVendorPkg(dirPath, vendorPkgs)
+		log.Println(vendorPkgs)
+		if f.IsDir() && f.Name() != "vendor" && !strings.HasPrefix(f.Name(), ".") {
+			if !ctx.ignore[(dirPath + "/" + f.Name())[len(pathSrc):]] {
+				ctx.genDir(dirPath+"/"+f.Name(), vendorPkgs)
 			}
 		} else {
 			if strings.HasSuffix(f.Name(), ".go") && (!strings.HasSuffix(f.Name(), "_test.go") ) {
@@ -75,11 +85,52 @@ func genDir(base, dirPath string, ctx map[string]bool, ignore string) {
 				}
 				for _, im := range f.Imports {
 					p, _ := strconv.Unquote(im.Path.Value)
-					if !strings.HasPrefix(p, base) && (!standPkgs[strings.Split(p, "/")[0]]) {
-						ctx[p] = true
+					if !strings.HasPrefix(p, ctx.pkg) && (!standPkgs[strings.Split(p, "/")[0]]) && (!vendorPkgs[p]) {
+						ctx.imports[p] = true
 					}
 				}
 			}
 		}
+	}
+}
+func copySet(set map[string]bool) (map[string]bool) {
+	copied := map[string]bool{}
+	for k, v := range set {
+		copied[k] = v
+	}
+	return copied
+}
+func findVendorPkg(dirPath string, set map[string]bool) () {
+	dirInfo, err := os.Lstat(dirPath + "/vendor")
+	if err != nil {
+		return
+	}
+	if !dirInfo.IsDir() {
+		return
+	}
+	findValidPkg(set, dirPath+"/vendor/", "")
+	return
+}
+func findValidPkg(set map[string]bool, base string, parent string) {
+	dir, err := os.Open(base + parent)
+	if err != nil {
+		return
+	}
+	list, _ := dir.Readdir(-1)
+	hasGoFile := false
+	for _, v := range list {
+		if v.IsDir() {
+			if parent == "" {
+				findValidPkg(set, base, v.Name())
+			}else{
+				findValidPkg(set, base, parent+"/"+v.Name())
+			}
+		}
+		if (!v.IsDir() ) && strings.HasSuffix(v.Name(), ".go") {
+			hasGoFile = true
+		}
+	}
+	if hasGoFile {
+		set[parent] = true
 	}
 }
