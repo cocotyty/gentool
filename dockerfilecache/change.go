@@ -28,6 +28,10 @@ func ReplaceDockerfileCache(pkg string, ignore map[string]bool) {
 	data, _ := ioutil.ReadFile(pathSrc + pkg + "/Dockerfile")
 	begin := bytes.Index(data, []byte("# GoGetBegin"))
 	end := bytes.Index(data, []byte("# GoGetEnd"))
+	if begin == -1 || end == -1 {
+		panic("cannot find '# GoGetBegin' or '# GoGetEnd' ")
+		return
+	}
 	pkgs := (&Context{pkg: pkg, ignore: ignore, imports: map[string]bool{}}).gen()
 
 	buffer := bytes.NewBuffer(nil)
@@ -122,7 +126,7 @@ func findValidPkg(set map[string]bool, base string, parent string) {
 		if v.IsDir() {
 			if parent == "" {
 				findValidPkg(set, base, v.Name())
-			}else{
+			} else {
 				findValidPkg(set, base, parent+"/"+v.Name())
 			}
 		}
