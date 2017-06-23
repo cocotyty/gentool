@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"io/ioutil"
 	"bytes"
-	"log"
 )
 
 var standPkgs = map[string]bool{}
@@ -75,7 +74,6 @@ func (ctx *Context) genDir(dirPath string, vendorPkgs map[string]bool) {
 	for _, f := range fi {
 		vendorPkgs = copySet(vendorPkgs)
 		findVendorPkg(dirPath, vendorPkgs)
-		log.Println(vendorPkgs)
 		if f.IsDir() && f.Name() != "vendor" && !strings.HasPrefix(f.Name(), ".") {
 			if !ctx.ignore[(dirPath + "/" + f.Name())[len(pathSrc):]] {
 				ctx.genDir(dirPath+"/"+f.Name(), vendorPkgs)
