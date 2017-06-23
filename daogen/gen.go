@@ -167,9 +167,6 @@ var modelOnlyTpl = `
 package {{.pkg}}
 
 import (
-	"github.com/jmoiron/sqlx"
-	"database/sql"
-	"bytes"
 	{{if .needTimeImport}}"time"{{end}}
 )
 // {{.comment}}
