@@ -1,14 +1,14 @@
 package dockerfilecache
 
 import (
-	"sort"
-	"os"
-	"strings"
-	"go/token"
-	"go/parser"
-	"strconv"
-	"io/ioutil"
 	"bytes"
+	"go/parser"
+	"go/token"
+	"io/ioutil"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 var standPkgs = map[string]bool{}
@@ -24,7 +24,11 @@ func init() {
 	pathSrc = os.Getenv("GOPATH") + "/src/"
 }
 func ReplaceDockerfileCache(pkg string, ignore map[string]bool) {
-	data, _ := ioutil.ReadFile(pathSrc + pkg + "/Dockerfile")
+	ReplaceNamedDockerfileCache(pkg, ignore, "Dockerfile")
+}
+
+func ReplaceNamedDockerfileCache(pkg string, ignore map[string]bool, name string) {
+	data, _ := ioutil.ReadFile(pathSrc + pkg + "/" + name)
 	begin := bytes.Index(data, []byte("# GoGetBegin"))
 	end := bytes.Index(data, []byte("# GoGetEnd"))
 	if begin == -1 || end == -1 {
@@ -79,7 +83,7 @@ func (ctx *Context) genDir(dirPath string, vendorPkgs map[string]bool) {
 				ctx.genDir(dirPath+"/"+f.Name(), vendorPkgs)
 			}
 		} else {
-			if strings.HasSuffix(f.Name(), ".go") && (!strings.HasSuffix(f.Name(), "_test.go") ) {
+			if strings.HasSuffix(f.Name(), ".go") && (!strings.HasSuffix(f.Name(), "_test.go")) {
 				set := token.NewFileSet()
 				f, err := parser.ParseFile(set, dirPath+"/"+f.Name(), nil, parser.ImportsOnly)
 				if err != nil {
@@ -95,14 +99,14 @@ func (ctx *Context) genDir(dirPath string, vendorPkgs map[string]bool) {
 		}
 	}
 }
-func copySet(set map[string]bool) (map[string]bool) {
+func copySet(set map[string]bool) map[string]bool {
 	copied := map[string]bool{}
 	for k, v := range set {
 		copied[k] = v
 	}
 	return copied
 }
-func findVendorPkg(dirPath string, set map[string]bool) () {
+func findVendorPkg(dirPath string, set map[string]bool) {
 	dirInfo, err := os.Lstat(dirPath + "/vendor")
 	if err != nil {
 		return
@@ -128,7 +132,7 @@ func findValidPkg(set map[string]bool, base string, parent string) {
 				findValidPkg(set, base, parent+"/"+v.Name())
 			}
 		}
-		if (!v.IsDir() ) && strings.HasSuffix(v.Name(), ".go") {
+		if (!v.IsDir()) && strings.HasSuffix(v.Name(), ".go") {
 			hasGoFile = true
 		}
 	}
