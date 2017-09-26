@@ -1,16 +1,16 @@
 package daogen
 
 import (
-	"reflect"
-	"strings"
-	"os"
-	"github.com/jmoiron/sqlx"
 	"database/sql"
-	"os/exec"
-	"regexp"
-	"log"
-	"text/template"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+	"log"
+	"os"
+	"os/exec"
+	"reflect"
+	"regexp"
+	"strings"
+	"text/template"
 )
 
 type Gen struct {
@@ -18,7 +18,7 @@ type Gen struct {
 	disableBoolean bool
 }
 
-func (g *Gen) EnableBoolean() (*Gen) {
+func (g *Gen) EnableBoolean() *Gen {
 	g.disableBoolean = true
 	return g
 }
@@ -36,7 +36,7 @@ type Column struct {
 	Null       sql.NullString `db:"Null"`
 	Key        []byte         `db:"Key"`
 	Default    []byte         `db:"Default"`
-	Comment    string          `db:"Comment"`
+	Comment    string         `db:"Comment"`
 	Extra      []byte         `db:"Extra"`
 	Privileges []byte         `db:"Privileges"`
 	Collation  []byte         `db:"Collation"`
@@ -50,17 +50,21 @@ type GoColumn struct {
 	Comment    string
 }
 
+var GOPATH string
+
+func init() {
+	GOPATH = strings.Split(os.Getenv("GOPATH"), string(os.PathListSeparator))[0]
+}
 func (g *Gen) G(pkg, address string) {
 	g.g(pkg, address, tpl)
+}
+func (g *Gen) ProductTable(pkg, address string, table string) {
 }
 func (g *Gen) Models(pkg, address string) {
 	g.g(pkg, address, modelOnlyTpl)
 }
 func (g *Gen) g(pkg, address, tpl string) {
-	paths := strings.Split(os.Getenv("GOPATH"), string(os.PathListSeparator))
-	GOPATH := paths[0]
 	os.MkdirAll(GOPATH+string(os.PathSeparator)+"src"+string(os.PathSeparator)+strings.Replace(pkg, "/", string(os.PathSeparator), -1), 0777)
-	log.Println(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1))
 	basePkg := pkg[strings.LastIndex(pkg, "/")+1:]
 	g.db = sqlx.MustOpen("mysql", address)
 	defer g.db.Close()
@@ -81,69 +85,71 @@ WHERE
 	}
 
 	for _, v := range tables {
-		log.Println(v.Name)
-		cols := []*Column{}
-		err := g.db.Select(&cols, "SHOW FULL COLUMNS FROM `"+v.Name+"`")
-		if err != nil {
-			panic(err)
-		}
-
-		cs := []*GoColumn{}
-		needTimeImport := false
-		idElemField := ""
-		idElemCol := ""
-		for _, c := range cols {
-			log.Println(c)
-			gc := &GoColumn{}
-			if c.Null.String != "NO" {
-				gc.CanNull = true
-			}
-			colType := strings.ToLower(c.Type)
-			gc.Comment = c.Comment
-			gc.Name = convertToCamel(c.Field)
-			if gc.Comment == "" {
-				gc.Comment = c.Field
-			}
-			gc.Annotation = "`db:\"" + c.Field + "\" json:\"" + convertToLowerCamel(c.Field) + "\"`"
-			gc.DBName = c.Field
-			if strings.Contains(colType, "char") || strings.Contains(colType, "text") {
-				gc.Type = "string"
-			} else if strings.Contains(colType, "tinyint") || strings.Contains(colType, "bool") {
-				if g.disableBoolean {
-					gc.Type = "bool"
-				} else {
-					gc.Type = "int"
-				}
-			} else if strings.Contains(colType, "int") {
-				if strings.ToLower(c.Field) == "id" {
-					idElemField = c.Field
-					idElemCol = gc.Name
-				}
-				gc.Type = "int"
-			} else if strings.Contains(colType, "float") {
-				gc.Type = "float32"
-			} else if strings.Contains(colType, "double") {
-				gc.Type = "float64"
-			} else if strings.Contains(colType, "time") || strings.Contains(colType, "date") || strings.Contains(colType, "datetime") || strings.Contains(colType, "timestamp") {
-				gc.Type = "time.Time"
-				needTimeImport = true
-			} else if strings.Contains(colType, "blob") {
-				gc.Type = "[]byte"
-			}
-
-			cs = append(cs, gc)
-		}
-		f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-		err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
-		if err != nil {
-			log.Println(err)
-		}
-		f.Close()
+		g.genTable(v, t, pkg, basePkg)
 	}
 	cmd := exec.Command("go", "fmt", pkg)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Run()
+}
+func (g *Gen) genTable(v *Table, t *template.Template, pkg string, basePkg string) {
+	cols := []*Column{}
+	err := g.db.Select(&cols, "SHOW FULL COLUMNS FROM `"+v.Name+"`")
+	if err != nil {
+		panic(err)
+	}
+
+	cs := []*GoColumn{}
+	needTimeImport := false
+	idElemField := ""
+	idElemCol := ""
+	for _, c := range cols {
+		log.Println(c)
+		gc := &GoColumn{}
+		if c.Null.String != "NO" {
+			gc.CanNull = true
+		}
+		colType := strings.ToLower(c.Type)
+		gc.Comment = c.Comment
+		gc.Name = convertToCamel(c.Field)
+		if gc.Comment == "" {
+			gc.Comment = c.Field
+		}
+		gc.Annotation = "`db:\"" + c.Field + "\" json:\"" + convertToLowerCamel(c.Field) + "\"`"
+		gc.DBName = c.Field
+		if strings.Contains(colType, "char") || strings.Contains(colType, "text") {
+			gc.Type = "string"
+		} else if strings.Contains(colType, "tinyint") || strings.Contains(colType, "bool") {
+			if g.disableBoolean {
+				gc.Type = "bool"
+			} else {
+				gc.Type = "int"
+			}
+		} else if strings.Contains(colType, "int") {
+			if strings.ToLower(c.Field) == "id" {
+				idElemField = c.Field
+				idElemCol = gc.Name
+			}
+			gc.Type = "int"
+		} else if strings.Contains(colType, "float") {
+			gc.Type = "float32"
+		} else if strings.Contains(colType, "double") {
+			gc.Type = "float64"
+		} else if strings.Contains(colType, "time") || strings.Contains(colType, "date") || strings.Contains(colType, "datetime") || strings.Contains(colType, "timestamp") {
+			gc.Type = "time.Time"
+			needTimeImport = true
+		} else if strings.Contains(colType, "blob") {
+			gc.Type = "[]byte"
+		}
+
+		cs = append(cs, gc)
+	}
+	f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
+	err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+	if err != nil {
+		log.Println(err)
+	}
+	f.Close()
 }
 
 func convertToCamel(name string) string {
