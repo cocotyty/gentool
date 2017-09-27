@@ -16,10 +16,21 @@ import (
 type Gen struct {
 	db             *sqlx.DB
 	disableBoolean bool
+	enableCache    bool
+	specialTables  []string
 }
 
+func (g *Gen) SpecialTables(tables ...string) *Gen {
+	g.specialTables = tables
+	return g
+}
 func (g *Gen) EnableBoolean() *Gen {
 	g.disableBoolean = true
+	return g
+}
+
+func (g *Gen) EnableCache() *Gen {
+	g.enableCache = true
 	return g
 }
 func NewGen() *Gen {
@@ -83,10 +94,22 @@ WHERE
 	if err != nil {
 		panic(err)
 	}
-
-	for _, v := range tables {
-		g.genTable(v, t, pkg, basePkg)
+	if g.specialTables != nil {
+		StringSet := map[string]bool{}
+		for _, v := range g.specialTables {
+			StringSet[v] = true
+		}
+		for _, v := range tables {
+			if StringSet[v.Name] {
+				g.genTable(v, t, pkg, basePkg)
+			}
+		}
+	} else {
+		for _, v := range tables {
+			g.genTable(v, t, pkg, basePkg)
+		}
 	}
+
 	cmd := exec.Command("go", "fmt", pkg)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -145,7 +168,7 @@ func (g *Gen) genTable(v *Table, t *template.Template, pkg string, basePkg strin
 		cs = append(cs, gc)
 	}
 	f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-	err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+	err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needCache": g.enableCache, "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
 	if err != nil {
 		log.Println(err)
 	}
@@ -189,9 +212,59 @@ package {{.pkg}}
 import (
 	"github.com/jmoiron/sqlx"
 	"database/sql"
-	"bytes"
-	{{if .needTimeImport}}"time"{{end}}
+{{if .needCache}}
+	"github.com/cocotyty/gentool/gziptool"
+	"gopkg.in/redis.v4"
+	"strconv"
+{{end}}"bytes"
+	{{if or .needTimeImport .needCache}}"time"{{end}}
 )
+
+{{if .needCache}}
+type IDCache{{.name}}Dao struct{
+	*{{.name}}Dao ` + "`sm:\"(.Ref)\"`" + `
+	Client *redis.Client ` + "`sm:\"(.Client)\"`" + `
+	Prefix string ` + "`sm:\"(.Prefix)\"`" + `
+	Exp time.Duration
+}
+func (d *IDCache{{.name}}Dao)Update(ID int, kv map[string]interface{}) (res sql.Result, err error) {
+	key:=d.Prefix+strconv.Itoa(ID)
+	res,err=d.{{.name}}Dao.Update(ID,kv)
+	if err == nil {
+		d.Client.Del(key).Result()
+	}
+	return
+}
+func (d *IDCache{{.name}}Dao) FindByID(ID int)(one *{{.name}},err error){
+	key:=d.Prefix+strconv.Itoa(ID)
+	data,err:=d.Client.Get(key).Bytes()
+	if err==nil{
+		one=&{{.name}}{}
+		err=gziptool.GUnzipJSON(data,one)
+		if err == nil{
+			return one,nil
+		}
+	}
+	one,err=d.{{.name}}Dao.FindByID(ID)
+	if err == nil {
+		data,_:=gziptool.JSONGzip(one)
+		d.Client.Set(key,data,d.Exp).Result()
+	}
+	return
+}
+
+func (d *IDCache{{.name}}Dao) InsertX(one *{{.name}})(err error){
+	if err:=d.{{.name}}Dao.InsertX(one);err!=nil{
+		return err
+	}
+	another, err := d.FindByID(one.Id)
+	if err != nil {
+		return nil
+	}
+	*one = *another
+	return nil
+}
+{{end}}
 // {{.comment}}
 type {{.name}} struct{
 	{{range .cols}}
