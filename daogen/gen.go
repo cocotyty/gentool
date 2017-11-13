@@ -17,11 +17,16 @@ type Gen struct {
 	db             *sqlx.DB
 	disableBoolean bool
 	enableCache    bool
+	useInterface            bool
 	specialTables  []string
 }
 
 func (g *Gen) SpecialTables(tables ...string) *Gen {
 	g.specialTables = tables
+	return g
+}
+func (g *Gen) UseInterface() *Gen {
+	g.useInterface = true
 	return g
 }
 func (g *Gen) EnableBoolean() *Gen {
@@ -168,7 +173,7 @@ func (g *Gen) genTable(v *Table, t *template.Template, pkg string, basePkg strin
 		cs = append(cs, gc)
 	}
 	f, _ := os.Create(GOPATH + string(os.PathSeparator) + "src" + string(os.PathSeparator) + strings.Replace(pkg, "/", string(os.PathSeparator), -1) + string(os.PathSeparator) + v.Name + ".go")
-	err = t.Execute(f, map[string]interface{}{"idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needCache": g.enableCache, "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
+	err = t.Execute(f, map[string]interface{}{"useInterface": g.useInterface, "idElemCol": idElemCol, "idElemField": idElemField, "name": convertToCamel(v.Name), "comment": strings.Replace(v.Comment, "\n", "\n //", -1), "needCache": g.enableCache, "needTimeImport": needTimeImport, "pkg": basePkg, "cols": cs, "fields": cols, "table": v.Name})
 	if err != nil {
 		log.Println(err)
 	}
@@ -210,7 +215,11 @@ var tpl = `
 package {{.pkg}}
 
 import (
+{{if .useInterface}}
+	"github.com/cocotyty/gentool/daogen/itfc"
+{{else}}
 	"github.com/jmoiron/sqlx"
+{{end}}
 	"database/sql"
 {{if .needCache}}
 	"github.com/cocotyty/gentool/gziptool"
@@ -278,13 +287,25 @@ type {{.name}}Dao struct{
 	{{end}}
 	Columns []string ` + "`sm:\"-\"`" + `
 	Table string  ` + "`sm:\"-\"`" + `
+	{{if .useInterface}}
+	DB itfc.SqlxHandle ` + "`sm:\"@.(.)\"`" + `
+	{{else}}
 	DB *sqlx.DB ` + "`sm:\"@.(.)\"`" + `
+	{{end}}
 }
+{{if .useInterface}}
+func New{{.name}}Dao(db itfc.SqlxHandle)(*{{.name}}Dao){
+	 dao:=&{{.name}}Dao{DB:db}
+	 dao.Init()
+	 return dao
+}
+{{else}}
 func New{{.name}}Dao(db *sqlx.DB)(*{{.name}}Dao){
 	 dao:=&{{.name}}Dao{DB:db}
 	 dao.Init()
 	 return dao
 }
+{{end}}
 func (dao *{{.name}}Dao)Init(){
 	dao.Columns=[]string{ {{range .cols}}
 	 "{{.DBName}}",
