@@ -17,7 +17,7 @@ type Gen struct {
 	db             *sqlx.DB
 	disableBoolean bool
 	enableCache    bool
-	useInterface            bool
+	useInterface   bool
 	specialTables  []string
 }
 
@@ -138,7 +138,7 @@ func (g *Gen) genTable(v *Table, t *template.Template, pkg string, basePkg strin
 			gc.CanNull = true
 		}
 		colType := strings.ToLower(c.Type)
-		gc.Comment = c.Comment
+		gc.Comment = strings.Replace(c.Comment, "\n", `\n`, -1)
 		gc.Name = convertToCamel(c.Field)
 		if gc.Comment == "" {
 			gc.Comment = c.Field
